@@ -17,6 +17,31 @@ def checkRes(res):
     if res.status_code != 200:
         raise ValueError(f'Error {res.status_code}: {res.reason}')
 
+def getTraits(monster):
+    return [i['name'] for i in monster['traits']]
+
+def getMonsterXP(monster, level):
+    return 10 if monster['level'] == (level - 4) else 15 if monster['level'] == (level - 3) else 20 if monster['level'] == (level - 2) else 30 if monster['level'] == (level - 1) else 40 if monster['level'] == level else 60 if monster['level'] == (level + 1) else 80 if monster['level'] == (level + 2) else 120 if monster['level'] == (level + 3) else 160 if monster['level'] == (level + 4) else 5000
+
+def addMonster(encounter, monsterList, level, xpBudget, xpTotal):
+    monster = random.choice(monsterList)
+    monsterXP = getMonsterXP(monster, level)
+    i = 0
+
+    while ((xpTotal + monsterXP) > xpBudget) and (i < 10):
+        print(f'Try number {i + 1}...')
+        monster = random.choice(monsterList)
+        monsterXP = getMonsterXP(monster, level)
+        i += 1
+    
+    if ((xpTotal + monsterXP) > xpBudget) and (i == 10):
+        return xpTotal, i
+    else:
+        encounter.append(monster)
+        xpTotal += monsterXP
+    
+    return xpTotal, i
+
 def infest(level, motif, playerNum, rooms):
     # Get Monsters
     res = requests.get('https://mimic-fight-club.github.io/monsterTable-2023-07-22.js')
@@ -26,8 +51,23 @@ def infest(level, motif, playerNum, rooms):
     monsters = json.loads(interpreter.evaljs('JSON.stringify(creatureList)'))
 
     for i in range(len(rooms)):
-        difficulty = random.randint(0, 4)
-        xpBudget = (60 + ((playerNum - 4) * 20)) if difficulty == 0 else (80 + ((playerNum - 4) * 20)) if difficulty == 1 else (120 + ((playerNum - 4) * 30)) if difficulty == 2 else (160 + ((playerNum - 4) * 40))
+        print(f'Infesting room {i + 1} of {len(rooms)}...')
+        difficulty = random.randint(0, 3)
+        xpBudget = (60 + ((playerNum - 4) * 20)) if difficulty == 0 else (80 + ((playerNum - 4) * 20)) if difficulty == 1 else (120 + ((playerNum - 4) * 30))
+        encounterMonsters = [i for i in monsters if i['level'] >= (level - 4) and i['level'] <= (level + 3) and 'Unique' not in getTraits(i)]
+        xpTotal = 0
+        encounter = []
+        
+        while xpTotal < xpBudget:
+            xpTotal, tries = addMonster(encounter, encounterMonsters, level, xpBudget, xpTotal)
+
+            if tries == 10:
+                break
+        
+        if 'contents' not in rooms[i].keys():
+            rooms[i]['contents'] = {}
+        
+        rooms[i]['contents']['monster'] = encounter
     
     return rooms
 
@@ -76,6 +116,7 @@ def main(args):
     mapData = res.json()
     random.seed(args.seed)
     mapData['rooms'] = infest(args.level, args.motif, args.playerNum, mapData['rooms'][1:])
+    breakpoint()
 
 def parseArgs():
     parser = argparse.ArgumentParser(description='A random dungeon generator for Pathfinder 2nd edition')
